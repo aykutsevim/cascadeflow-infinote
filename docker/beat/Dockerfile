@@ -1,11 +1,13 @@
-# API Service Dockerfile (Optimized - No OCR dependencies)
+# Beat Service Dockerfile (Optimized - No OCR dependencies)
+# Celery Beat scheduler - only needs base dependencies
 FROM python:3.11-slim
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    C_FORCE_ROOT=true
 
 # Set work directory
 WORKDIR /app
@@ -15,10 +17,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     postgresql-client \
     libpq-dev \
-    libmagic1 \
-    libjpeg-dev \
-    zlib1g-dev \
-    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy only base requirements (no OCR dependencies)
@@ -31,15 +29,5 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Copy application code
 COPY backend/ .
 
-# Create directory for static files
-RUN mkdir -p /app/staticfiles
-
-# Expose port
-EXPOSE 8000
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:8000/api/ || exit 1
-
 # Default command (overridden by docker-compose)
-CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "4"]
+CMD ["celery", "-A", "config", "beat", "--loglevel=info"]

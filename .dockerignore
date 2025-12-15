@@ -68,6 +68,17 @@ docs/
 .coverage
 htmlcov/
 test-results/
+test_*.py
+*_test.py
+tests/
+test_assets/
+
+# Frontend (not needed in backend images)
+frontend/
+node_modules/
+
+# Weights (use volumes, not in image)
+weights/
 
 # OS
 Thumbs.db

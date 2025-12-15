@@ -1,0 +1,9 @@
+# OCR Dependencies (CPU-based)
+# Used by worker service for OCR processing
+
+# Lightweight OCR (works without GPU)
+pytesseract==0.3.10
+easyocr==1.7.1
+
+# Flower for monitoring
+flower==2.0.1

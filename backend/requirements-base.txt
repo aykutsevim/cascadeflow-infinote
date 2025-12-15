@@ -1,0 +1,27 @@
+# Django and DRF
+Django==4.2.7
+djangorestframework==3.14.0
+django-cors-headers==4.3.1
+django-environ==0.11.2
+
+# Database
+psycopg2-binary==2.9.9
+
+# Celery
+celery==5.3.4
+redis==5.0.1
+
+# S3/MinIO Storage
+boto3==1.29.7
+django-storages==1.14.2
+
+# WSGI Server
+gunicorn==21.2.0
+whitenoise==6.6.0
+
+# Image Processing (minimal)
+Pillow==10.1.0
+
+# Utilities
+python-magic==0.4.27
+uuid==1.30

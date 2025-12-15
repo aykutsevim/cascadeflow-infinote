@@ -126,7 +126,7 @@ services:
   beat:
     build:
       context: .
-      dockerfile: docker/worker/Dockerfile
+      dockerfile: docker/beat/Dockerfile
     container_name: taskocr-beat
     command: celery -A config beat --loglevel=info
     volumes:
@@ -145,7 +145,7 @@ services:
   flower:
     build:
       context: .
-      dockerfile: docker/worker/Dockerfile
+      dockerfile: docker/beat/Dockerfile
     container_name: taskocr-flower
     command: celery -A config flower --port=5555
     volumes:

@@ -1,3 +1,13 @@
+# ==========================================
+# DEPRECATED: Use split requirements files
+# ==========================================
+# - requirements-base.txt: Base Django/Celery dependencies
+# - requirements-ocr.txt: OCR dependencies (for worker)
+# - requirements-gpu.txt: GPU-specific dependencies (for GPU worker)
+#
+# This file is kept for backward compatibility
+# ==========================================
+
 # Django and DRF
 Django==4.2.7
 djangorestframework==3.14.0

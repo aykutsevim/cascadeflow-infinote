@@ -1,4 +1,4 @@
-# Worker Service Dockerfile
+# Worker Service Dockerfile (CPU - with OCR dependencies)
 FROM python:3.11-slim
 
 # Set environment variables
@@ -12,28 +12,32 @@ ENV PYTHONUNBUFFERED=1 \
 WORKDIR /app
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
+    g++ \
     postgresql-client \
     libpq-dev \
     libmagic1 \
-    # Image processing dependencies
     libjpeg-dev \
     zlib1g-dev \
     libpng-dev \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements and install Python dependencies
-COPY backend/requirements.txt .
-RUN pip install --upgrade pip && \
-    pip install -r requirements.txt
+# Copy requirements files
+COPY backend/requirements-base.txt .
+COPY backend/requirements-ocr.txt .
+
+# Install Python dependencies
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements-base.txt && \
+    pip install --no-cache-dir -r requirements-ocr.txt
 
 # Copy application code
 COPY backend/ .
-
-# Create celery user (optional, for security)
-# RUN useradd -m -u 1000 celery && chown -R celery:celery /app
-# USER celery
 
 # Health check for worker
 HEALTHCHECK --interval=60s --timeout=10s --start-period=60s --retries=3 \
