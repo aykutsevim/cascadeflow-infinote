@@ -1,0 +1,20 @@
+# GPU-specific requirements for dots.ocr
+
+# Transformers and dependencies
+transformers>=4.37.0
+accelerate>=0.25.0
+sentencepiece>=0.1.99
+
+# Vision-Language utilities
+qwen-vl-utils>=0.0.2
+
+# Flash Attention (optional but recommended for performance)
+# flash-attn>=2.5.0  # Commented out - requires compilation with CUDA
+
+# Additional ML dependencies
+einops>=0.7.0
+timm>=0.9.0
+bitsandbytes>=0.41.0
+
+# EasyOCR for GPU-accelerated OCR
+easyocr>=1.7.0

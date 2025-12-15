@@ -1,0 +1,42 @@
+# Docker Compose GPU override for dots.ocr
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.gpu.yml up
+
+services:
+  worker:
+    build:
+      context: .
+      dockerfile: docker/worker/Dockerfile.gpu
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    environment:
+      - OCR_BACKEND=dots
+      - DOTS_OCR_MODEL_PATH=/app/weights/DotsOCR
+    volumes:
+      - ./backend:/app
+      - ./weights:/app/weights:ro
+    restart: unless-stopped
+
+  # Optional: GPU-accelerated flower for monitoring
+  flower:
+    build:
+      context: .
+      dockerfile: docker/worker/Dockerfile.gpu
+    command: celery -A config flower --port=5555
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    environment:
+      - OCR_BACKEND=dots
+      - DOTS_OCR_MODEL_PATH=/app/weights/DotsOCR
+    volumes:
+      - ./backend:/app
+      - ./weights:/app/weights:ro

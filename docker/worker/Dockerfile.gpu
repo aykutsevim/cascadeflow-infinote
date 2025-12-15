@@ -1,0 +1,81 @@
+# GPU-Enabled Worker Dockerfile for dots.ocr
+# Requires NVIDIA Docker runtime and CUDA-capable GPU
+
+FROM nvidia/cuda:12.1.0-cudnn8-runtime-ubuntu22.04
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    DEBIAN_FRONTEND=noninteractive \
+    C_FORCE_ROOT=true
+
+# Install Python 3.12 and dependencies
+RUN apt-get update && apt-get install -y \
+    software-properties-common \
+    && add-apt-repository ppa:deadsnakes/ppa \
+    && apt-get update && apt-get install -y \
+    python3.12 \
+    python3.12-dev \
+    python3.12-venv \
+    python3-pip \
+    gcc \
+    g++ \
+    postgresql-client \
+    libpq-dev \
+    libmagic1 \
+    libjpeg-dev \
+    zlib1g-dev \
+    libpng-dev \
+    git \
+    wget \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set Python 3.12 as default
+RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1 \
+    && update-alternatives --install /usr/bin/python python /usr/bin/python3.12 1
+
+# Install pip for Python 3.12
+RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12
+
+# Set work directory
+WORKDIR /app
+
+# Copy requirements
+COPY backend/requirements.txt requirements-base.txt
+COPY docker/worker/requirements-gpu.txt .
+
+# Install PyTorch with CUDA support
+RUN pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+
+# Install base requirements
+RUN pip install -r requirements-base.txt
+
+# Install dots.ocr and GPU-specific requirements
+RUN pip install -r requirements-gpu.txt
+
+# Clone and install dots.ocr (skip flash-attn dependency)
+RUN git clone https://github.com/rednote-hilab/dots.ocr.git /tmp/dots-ocr \
+    && cd /tmp/dots-ocr \
+    && sed -i '/flash-attn/d' requirements.txt \
+    && pip install -e . \
+    && cd / \
+    && rm -rf /tmp/dots-ocr
+
+# Copy application code
+COPY backend/ .
+
+# Create directories
+RUN mkdir -p /app/weights
+
+# Download dots.ocr model (commented out - do this manually or via init script)
+# RUN python3 /app/tools/download_dots_model.py
+
+# Health check
+HEALTHCHECK --interval=60s --timeout=10s --start-period=120s --retries=3 \
+    CMD celery -A config inspect ping -d celery@$HOSTNAME || exit 1
+
+# Default command
+CMD ["celery", "-A", "config", "worker", "--loglevel=info"]
