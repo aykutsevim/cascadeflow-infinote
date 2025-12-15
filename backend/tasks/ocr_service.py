@@ -213,7 +213,7 @@ class OCRService:
 - Due date (deadline, if mentioned)
 - Priority (high/medium/low based on visual cues like underlining, stars, exclamation marks)
 
-Format the output as a structured list."""
+Format the output as a structured list with bounding boxes."""
 
         messages = [{
             "role": "user",
@@ -322,21 +322,45 @@ Format the output as a structured list."""
     def _parse_dots_ocr_output(self, output_text: str, image_size: tuple) -> List[Dict[str, Any]]:
         """Parse dots.ocr JSON output into tasks."""
         import json
+        from datetime import datetime
 
         tasks = []
         position_index = 0
 
         try:
-            # Parse JSON output
+            # Parse JSON output from the model
             ocr_items = json.loads(output_text)
 
-            # Filter for list items (task entries)
-            for item in ocr_items:
-                if item.get('category') == 'List-item':
-                    text = item.get('text', '')
+            # Ensure it's a list
+            if not isinstance(ocr_items, list):
+                logger.warning(f"Expected JSON array from model, got: {type(ocr_items)}")
+                return []
 
-                    # Remove bullet markers
-                    task_text = re.sub(r'^[\-\*\•\d]+[\.\)]?\s*', '', text)
+            # Process each task from the structured output
+            for item in ocr_items:
+                # Handle both new structured format and old format for backward compatibility
+                if 'task_name' in item:
+                    # New structured format with LLM-extracted fields
+                    task_name = item.get('task_name', '').strip()
+                    assignee = item.get('assignee', '').strip() or None
+                    description = item.get('description', '').strip()
+                    priority = item.get('priority', 'medium').lower()
+
+                    # Parse due_date if provided
+                    due_date = None
+                    due_date_str = item.get('due_date', '').strip()
+                    if due_date_str and due_date_str != "null":
+                        try:
+                            # Try to parse the date
+                            due_date = datetime.strptime(due_date_str, '%Y-%m-%d').date()
+                        except ValueError:
+                            # Try alternative formats
+                            for fmt in ['%d/%m/%Y', '%m/%d/%Y', '%Y/%m/%d']:
+                                try:
+                                    due_date = datetime.strptime(due_date_str, fmt).date()
+                                    break
+                                except ValueError:
+                                    continue
 
                     # Extract bbox
                     bbox_data = item.get('bbox', [0, 0, 0, 0])
@@ -347,12 +371,47 @@ Format the output as a structured list."""
                         'height': int(bbox_data[3] - bbox_data[1]) if len(bbox_data) > 3 else 0
                     }
 
+                elif item.get('category') == 'List-item':
+                    # Old format (backward compatibility) - parse with smart extraction
+                    text = item.get('text', '')
+
+                    # Remove bullet markers
+                    clean_text = re.sub(r'^[\-\*\•\d]+[\.\)]?\s*', '', text)
+
+                    # Extract assignee first
+                    assignee = self._extract_assignee(clean_text)
+
+                    # Remove assignee from text to get clean task name
+                    task_name = self._remove_assignee_from_text(clean_text, assignee)
+
+                    # Extract due date and remove it from task name
+                    due_date = self._extract_date(clean_text)
+                    if due_date:
+                        # Remove date patterns from task name
+                        task_name = re.sub(r'\s+\d{1,2}[/\-\.]\d{1,2}[/\-\.]\d{2,4}', '', task_name)
+
+                    description = ''
+                    priority = self._extract_priority(clean_text)
+
+                    bbox_data = item.get('bbox', [0, 0, 0, 0])
+                    bbox = {
+                        'x': int(bbox_data[0]) if len(bbox_data) > 0 else 0,
+                        'y': int(bbox_data[1]) if len(bbox_data) > 1 else 0,
+                        'width': int(bbox_data[2] - bbox_data[0]) if len(bbox_data) > 2 else 0,
+                        'height': int(bbox_data[3] - bbox_data[1]) if len(bbox_data) > 3 else 0
+                    }
+                else:
+                    # Skip non-task items
+                    continue
+
+                # Only add tasks with a name
+                if task_name:
                     tasks.append({
-                        'name': task_text[:100],
-                        'description': '',
-                        'assignee': self._extract_assignee(task_text),
-                        'due_date': self._extract_date(task_text),
-                        'priority': self._extract_priority(task_text),
+                        'name': task_name[:100],
+                        'description': description,
+                        'assignee': assignee,
+                        'due_date': due_date,
+                        'priority': priority,
                         'position_index': position_index,
                         'confidence': 0.90,  # dots.ocr is generally high quality
                         'bbox': bbox
@@ -361,6 +420,7 @@ Format the output as a structured list."""
 
         except (json.JSONDecodeError, ValueError) as e:
             logger.warning(f"Failed to parse dots.ocr JSON output: {e}")
+            logger.warning(f"Raw output was: {output_text}")
             # Fallback to empty list
             tasks = []
 
@@ -539,18 +599,42 @@ Format the output as a structured list."""
     def _extract_assignee(self, text: str) -> Optional[str]:
         """Extract assignee from text patterns."""
         patterns = [
+            r'[→>]\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)',  # → Name or -> Name (arrow pattern, handles names like "Aykut" or "Hasan Smith")
             r'@(\w+)',  # @username
-            r'assigned to:?\s*([A-Z][a-z]+ [A-Z][a-z]+)',  # assigned to: Name
-            r'owner:?\s*([A-Z][a-z]+ [A-Z][a-z]+)',  # owner: Name
+            r'assigned to:?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)',  # assigned to: Name
+            r'owner:?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)',  # owner: Name
             r'\[([A-Z][a-z]+)\]',  # [Name]
+            r'\(([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\)',  # (Name) in parentheses
         ]
 
         for pattern in patterns:
             match = re.search(pattern, text)
             if match:
-                return match.group(1).strip()
+                assignee = match.group(1).strip()
+                # Remove any trailing dates or numbers
+                assignee = re.sub(r'\s+\d{1,2}[/\-\.]\d{1,2}[/\-\.]\d{2,4}.*$', '', assignee)
+                # Remove any trailing non-letter characters
+                assignee = re.sub(r'[^\w\s]+$', '', assignee).strip()
+                if assignee:
+                    return assignee
 
         return None
+
+    def _remove_assignee_from_text(self, text: str, assignee: Optional[str]) -> str:
+        """Remove assignee pattern from text to get clean task name."""
+        if not assignee:
+            return text
+
+        # Remove arrow patterns with assignee
+        text = re.sub(rf'\s*[→>]\s*{re.escape(assignee)}(?:\s+\d{{1,2}}[/\-\.]\d{{1,2}}[/\-\.]\d{{2,4}})?', '', text)
+        # Remove other assignee patterns
+        text = re.sub(rf'@{re.escape(assignee)}', '', text)
+        text = re.sub(rf'assigned to:?\s*{re.escape(assignee)}', '', text, flags=re.IGNORECASE)
+        text = re.sub(rf'owner:?\s*{re.escape(assignee)}', '', text, flags=re.IGNORECASE)
+        text = re.sub(rf'\[{re.escape(assignee)}\]', '', text)
+        text = re.sub(rf'\({re.escape(assignee)}\)', '', text)
+
+        return text.strip()
 
     def _estimate_bbox(self, position_index: int, image_size: tuple) -> Dict[str, int]:
         """Estimate bounding box for task based on position."""
@@ -607,3 +691,34 @@ Format the output as a structured list."""
             'image_size': {'width': width, 'height': height},
             'processing_method': 'mock',
         }
+
+
+# Global singleton instance for reusing the loaded model
+_ocr_service_instance = None
+
+
+def get_ocr_service(confidence_threshold=0.6, backend=None):
+    """
+    Get or create a singleton OCR service instance.
+
+    This ensures the model is loaded only once and reused across all requests,
+    preventing memory leaks and improving performance.
+
+    Args:
+        confidence_threshold: Minimum confidence score for accepting results
+        backend: Force specific backend ('dots', 'easyocr', 'tesseract', or None for auto)
+
+    Returns:
+        OCRService: Singleton instance of the OCR service
+    """
+    global _ocr_service_instance
+
+    if _ocr_service_instance is None:
+        logger.info("Initializing singleton OCR service instance...")
+        _ocr_service_instance = OCRService(
+            confidence_threshold=confidence_threshold,
+            backend=backend
+        )
+        logger.info("Singleton OCR service instance created successfully")
+
+    return _ocr_service_instance

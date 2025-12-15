@@ -12,7 +12,7 @@ from django.conf import settings
 from django.core.files.storage import default_storage
 
 from .models import ProcessingJob, ExtractedTask
-from .ocr_service import OCRService
+from .ocr_service import get_ocr_service
 
 logger = logging.getLogger(__name__)
 
@@ -45,8 +45,8 @@ def process_task_image(self, job_id):
         # Open image with PIL
         image = Image.open(BytesIO(image_data))
 
-        # Initialize OCR service
-        ocr_service = OCRService(
+        # Get singleton OCR service instance (model loaded only once)
+        ocr_service = get_ocr_service(
             confidence_threshold=settings.OCR_CONFIDENCE_THRESHOLD
         )
 
