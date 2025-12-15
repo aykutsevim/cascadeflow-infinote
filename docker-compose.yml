@@ -162,6 +162,24 @@ services:
     networks:
       - taskocr-network
 
+  # Frontend React App with tldraw
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend/Dockerfile
+    container_name: taskocr-frontend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "${FRONTEND_PORT:-5173}:5173"
+    environment:
+      - VITE_API_URL=http://localhost:${API_PORT:-8000}
+    depends_on:
+      - api
+    networks:
+      - taskocr-network
+
 networks:
   taskocr-network:
     driver: bridge

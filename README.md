@@ -1,9 +1,10 @@
-# Infinote - Handwritten Task OCR API
+# Infinote - Handwritten Task OCR with Interactive Canvas
 
-A powerful OCR (Optical Character Recognition) system for extracting tasks from handwritten notes using the dots.ocr vision-language model.
+A powerful OCR (Optical Character Recognition) system for extracting tasks from handwritten notes using the dots.ocr vision-language model, featuring an interactive canvas powered by tldraw.
 
 ## Features
 
+### Backend (OCR API)
 - **Intelligent Task Extraction**: Uses dots.ocr AI model to extract tasks from handwritten images
 - **Smart Assignee Detection**: Automatically identifies and separates assignee names from task descriptions
 - **Date Recognition**: Extracts and parses due dates in multiple formats
@@ -11,6 +12,14 @@ A powerful OCR (Optical Character Recognition) system for extracting tasks from 
 - **High Performance**: Model loaded once and reused across requests (no memory leaks)
 - **Async Processing**: Background task processing with Celery
 - **Scalable Architecture**: Docker-based deployment with GPU support
+
+### Frontend (Interactive Canvas)
+- **tldraw Canvas**: Infinite canvas for visual task management
+- **Photo Capture**: Take photos directly from camera or upload images
+- **Real-time Processing**: Live progress tracking with polling mechanism
+- **Canvas Integration**: Automatically creates color-coded task notes on the canvas
+- **Priority Colors**: Visual distinction with color-coded notes (red=urgent, orange=high, blue=medium, green=low)
+- **Material UI**: Modern, responsive interface with Material Design components
 
 ## API Documentation
 
@@ -230,10 +239,105 @@ The system recognizes multiple date formats:
 | YYYY-MM-DD | 2025-12-17 | 2025-12-17 |
 | Month Day | Dec 17 | 2025-12-17 |
 
+## Frontend Application
+
+### Interactive Canvas with tldraw
+
+The frontend provides an interactive canvas where extracted tasks are visualized as sticky notes.
+
+#### Photo Capture Component
+
+A floating action button (FAB) in the bottom-right corner opens the photo capture dialog:
+
+1. **Take Photo**: Use device camera to capture handwritten task lists
+2. **Upload Image**: Select an existing image from your device
+3. **Extract Tasks**: Send the image to the OCR API for processing
+4. **Add to Canvas**: Create visual task notes on the tldraw canvas
+
+#### Task Notes on Canvas
+
+Extracted tasks are displayed as tldraw note shapes with:
+- **Color coding by priority**:
+  - Red: Urgent
+  - Orange: High priority
+  - Blue: Medium priority
+  - Green: Low priority
+- **Task details**: Name, description, assignee, due date
+- **Grid layout**: Tasks arranged in a 3-column grid
+- **Auto-zoom**: Camera automatically zooms to show all new tasks
+
+#### Polling Mechanism
+
+The frontend uses an intelligent polling system to track OCR processing:
+- **Exponential backoff**: Starts at 1 second, increases to max 5 seconds
+- **Progress tracking**: Visual progress bar with percentage
+- **Status messages**: User-friendly status updates
+- **Timeout handling**: 5-minute maximum with graceful error handling
+- **Network resilience**: Automatic retry on network errors
+
+### Frontend Tech Stack
+
+- **React 19**: Latest React with hooks
+- **tldraw 4.x**: Infinite canvas library
+- **Material UI 5**: Component library
+- **Vite**: Build tool and dev server
+
+### Frontend Project Structure
+
+```
+frontend/
+├── src/
+│   ├── components/
+│   │   └── PhotoCapture.jsx    # Camera/upload component
+│   ├── App.jsx                  # Main app with tldraw canvas
+│   ├── App.css                  # Styles
+│   └── main.jsx                 # Entry point
+├── package.json                 # Dependencies
+├── vite.config.js               # Vite configuration
+└── index.html                   # HTML template
+```
+
+### Key Components
+
+#### PhotoCapture (`src/components/PhotoCapture.jsx`)
+
+The main component for capturing and processing handwritten tasks:
+
+```jsx
+// Features:
+- Camera capture using getUserMedia API
+- File upload with drag-and-drop support
+- Image preview before processing
+- Progress tracking with exponential backoff polling
+- Canvas integration via tldraw editor instance
+- Snackbar notifications for user feedback
+```
+
+#### App (`src/App.jsx`)
+
+The root component that integrates tldraw with PhotoCapture:
+
+```jsx
+import { Tldraw } from 'tldraw'
+import PhotoCapture from './components/PhotoCapture'
+
+function App() {
+  const [editor, setEditor] = useState(null)
+
+  return (
+    <div className="app-container">
+      <Tldraw persistenceKey="infinote" onMount={setEditor} />
+      <PhotoCapture editor={editor} />
+    </div>
+  )
+}
+```
+
 ## Architecture
 
 ### Technology Stack
 
+- **Frontend**: React 19 + tldraw + Material UI
 - **Backend**: Django + Django REST Framework
 - **OCR Engine**: dots.ocr (Vision-Language Model)
 - **Task Queue**: Celery + Redis
@@ -283,7 +387,7 @@ cp .env.example .env
 python backend/tools/download_dots_model.py
 ```
 
-4. Start services (CPU):
+4. Start all services (CPU):
 ```bash
 docker-compose up -d
 ```
@@ -293,9 +397,58 @@ Or with GPU support:
 docker-compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
 ```
 
-5. Test the API:
+5. Access the applications:
+   - **Frontend (Canvas)**: http://localhost:5173
+   - **Backend API**: http://localhost:8000
+   - **Flower (Celery Monitor)**: http://localhost:5555
+   - **MinIO Console**: http://localhost:9001
+
+6. Test the API:
 ```bash
 python test_simple.py
+```
+
+### Docker Services
+
+| Service | Container Name | Port | Description |
+|---------|---------------|------|-------------|
+| Frontend | taskocr-frontend | 5173 | React + tldraw canvas |
+| API | taskocr-api | 8000 | Django REST API |
+| Worker | taskocr-worker | - | Celery OCR worker |
+| Beat | taskocr-beat | - | Celery scheduler |
+| Flower | taskocr-flower | 5555 | Celery monitoring |
+| PostgreSQL | taskocr-postgres | 5432 | Database |
+| Redis | taskocr-redis | 6379 | Message broker |
+| MinIO | taskocr-minio | 9000/9001 | Object storage |
+
+### Environment Variables
+
+Key environment variables in `.env`:
+
+```bash
+# Frontend
+FRONTEND_PORT=5173              # Frontend dev server port
+
+# API
+API_PORT=8000                   # Backend API port
+API_WORKERS=4                   # Gunicorn worker count
+
+# Database
+POSTGRES_DB=taskocr
+POSTGRES_USER=taskocr_user
+POSTGRES_PASSWORD=taskocr_password
+
+# Redis
+REDIS_URL=redis://redis:6379/0
+
+# MinIO
+MINIO_ROOT_USER=minioadmin
+MINIO_ROOT_PASSWORD=minioadmin123
+MINIO_BUCKET=task-images
+
+# OCR
+OCR_BACKEND=dots                # dots, easyocr, or tesseract
+OCR_CONFIDENCE_THRESHOLD=0.6
 ```
 
 ## Testing
@@ -342,6 +495,29 @@ Total Time: 6-8 seconds
 ```
 
 **Speedup**: 87-92% faster after first call
+
+## Usage Guide
+
+### Using the Frontend Canvas
+
+1. **Open the Application**: Navigate to http://localhost:5173
+2. **Click the Camera Button**: Located in the bottom-right corner (blue FAB)
+3. **Capture or Upload Image**:
+   - Click "Take Photo" to use your device camera
+   - Click "Upload Image" to select a file
+4. **Extract Tasks**: Click "Extract Tasks" to send to OCR
+5. **Wait for Processing**: Watch the progress bar
+6. **Add to Canvas**: Click "Add All Tasks to Canvas"
+7. **View Tasks**: Color-coded sticky notes appear on the canvas
+
+### Canvas Features
+
+- **Pan**: Click and drag on empty space
+- **Zoom**: Mouse wheel or pinch gesture
+- **Select**: Click on notes to select
+- **Move**: Drag selected notes
+- **Edit**: Double-click notes to edit text
+- **Persistence**: Canvas state is saved automatically
 
 ## Example Use Cases
 

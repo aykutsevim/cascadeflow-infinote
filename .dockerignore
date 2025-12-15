@@ -73,9 +73,9 @@ test_*.py
 tests/
 test_assets/
 
-# Frontend (not needed in backend images)
-frontend/
+# Node modules (use volumes, not in image)
 node_modules/
+frontend/node_modules/
 
 # Weights (use volumes, not in image)
 weights/
