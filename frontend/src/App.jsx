@@ -1,8 +1,12 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { Tldraw } from 'tldraw'
 import 'tldraw/tldraw.css'
 import './App.css'
 import PhotoCapture from './components/PhotoCapture'
+import { TaskCardShapeUtil } from './shapes/TaskCardShape'
+
+// Custom shape utilities for the editor
+const customShapeUtils = [TaskCardShapeUtil]
 
 function App() {
   const [editor, setEditor] = useState(null)
@@ -13,7 +17,11 @@ function App() {
 
   return (
     <div className="app-container">
-      <Tldraw persistenceKey="infinote" onMount={handleMount} />
+      <Tldraw
+        persistenceKey="infinote"
+        onMount={handleMount}
+        shapeUtils={customShapeUtils}
+      />
       <PhotoCapture editor={editor} />
     </div>
   )

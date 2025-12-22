@@ -309,7 +309,7 @@ export default function PhotoCapture({ editor }) {
 
       // Card dimensions
       const cardWidth = 280;
-      const cardHeight = 140;
+      const cardHeight = 160;
       const cardGap = 20;
       const cardsPerRow = 3;
 
@@ -320,26 +320,20 @@ export default function PhotoCapture({ editor }) {
         const x = startX + (col * (cardWidth + cardGap));
         const y = startY + (row * (cardHeight + cardGap));
 
-        // Build frame name from task info
-        let frameName = task.task_name || 'Untitled Task';
-        if (task.assignee) {
-          frameName += ` (${task.assignee})`;
-        }
-        if (task.due_date) {
-          frameName += ` - Due: ${task.due_date}`;
-        }
-        frameName += ` [${(task.priority || 'medium').toUpperCase()}]`;
-
-        // Create a frame shape for each task
+        // Create a task-card shape for each task
         return {
           id: createShapeId(),
-          type: 'frame',
+          type: 'task-card',
           x,
           y,
           props: {
             w: cardWidth,
             h: cardHeight,
-            name: frameName,
+            taskName: task.task_name || 'Untitled Task',
+            description: task.description || '',
+            assignee: task.assignee || '',
+            dueDate: task.due_date || '',
+            priority: task.priority || 'medium',
           },
         };
       });
