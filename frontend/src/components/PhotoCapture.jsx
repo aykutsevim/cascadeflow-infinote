@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { createShapeId } from 'tldraw';
+import { createShapeId, toRichText } from 'tldraw';
 import {
   Button,
   Dialog,
@@ -288,7 +288,15 @@ export default function PhotoCapture({ editor }) {
     }
   };
 
-  // Create task boxes on the tldraw canvas
+  // Priority configuration matching TaskCardShape.jsx styling
+  const priorityConfig = {
+    urgent: { color: 'red', geoColor: 'light-red', label: 'URGENT' },
+    high: { color: 'orange', geoColor: 'light-yellow', label: 'HIGH' },
+    medium: { color: 'blue', geoColor: 'light-blue', label: 'MEDIUM' },
+    low: { color: 'green', geoColor: 'light-green', label: 'LOW' },
+  };
+
+  // Create task boxes on the tldraw canvas as grouped editable shapes
   const createTasksOnCanvas = useCallback(() => {
     if (!editor || !extractedTasks || extractedTasks.length === 0) {
       setSnackbar({
@@ -307,50 +315,219 @@ export default function PhotoCapture({ editor }) {
       const startX = viewportPageBounds.x + 50;
       const startY = viewportPageBounds.y + 50;
 
-      // Card dimensions
+      // Card dimensions matching TaskCardShape.jsx
       const cardWidth = 280;
       const cardHeight = 160;
-      const cardGap = 20;
+      const headerHeight = 32;
+      const footerHeight = 36;
+      const cardGap = 30;
       const cardsPerRow = 3;
+      const padding = 12;
 
-      const shapes = extractedTasks.map((task, index) => {
+      const allGroupIds = [];
+
+      extractedTasks.forEach((task, index) => {
         const row = Math.floor(index / cardsPerRow);
         const col = index % cardsPerRow;
 
-        const x = startX + (col * (cardWidth + cardGap));
-        const y = startY + (row * (cardHeight + cardGap));
+        const cardX = startX + (col * (cardWidth + cardGap));
+        const cardY = startY + (row * (cardHeight + cardGap));
 
-        // Create a task-card shape for each task
-        return {
-          id: createShapeId(),
-          type: 'task-card',
-          x,
-          y,
-          props: {
-            w: cardWidth,
-            h: cardHeight,
-            taskName: task.task_name || 'Untitled Task',
-            description: task.description || '',
-            assignee: task.assignee || '',
-            dueDate: task.due_date || '',
-            priority: task.priority || 'medium',
+        const priority = task.priority || 'medium';
+        const config = priorityConfig[priority] || priorityConfig.medium;
+
+        // Create shape IDs
+        const cardBackgroundId = createShapeId();
+        const headerBackgroundId = createShapeId();
+        const footerBackgroundId = createShapeId();
+        const priorityBadgeId = createShapeId();
+        const dueDateId = createShapeId();
+        const taskNameId = createShapeId();
+        const descriptionId = createShapeId();
+        const assigneeId = createShapeId();
+
+        // Calculate Y positions for each section
+        const headerY = cardY;
+        const contentY = cardY + headerHeight + 8;
+        const descriptionYPos = contentY + 28;
+        const footerY = cardY + cardHeight - footerHeight;
+
+        // Build shapes array for this task card
+        const cardShapes = [
+          // Main card background (white with border)
+          {
+            id: cardBackgroundId,
+            type: 'geo',
+            x: cardX,
+            y: cardY,
+            props: {
+              w: cardWidth,
+              h: cardHeight,
+              geo: 'rectangle',
+              fill: 'solid',
+              color: 'white',
+              dash: 'solid',
+              size: 's',
+            },
           },
-        };
+          // Header background (colored based on priority)
+          {
+            id: headerBackgroundId,
+            type: 'geo',
+            x: cardX + 2,
+            y: cardY + 2,
+            props: {
+              w: cardWidth - 4,
+              h: headerHeight,
+              geo: 'rectangle',
+              fill: 'solid',
+              color: config.geoColor,
+              dash: 'solid',
+              size: 's',
+            },
+          },
+          // Footer background (light grey)
+          ...(task.assignee ? [{
+            id: footerBackgroundId,
+            type: 'geo',
+            x: cardX + 2,
+            y: footerY,
+            props: {
+              w: cardWidth - 4,
+              h: footerHeight - 2,
+              geo: 'rectangle',
+              fill: 'solid',
+              color: 'white',
+              dash: 'solid',
+              size: 's',
+            },
+          }] : []),
+          // Priority badge text
+          {
+            id: priorityBadgeId,
+            type: 'text',
+            x: cardX + padding,
+            y: headerY + 6,
+            props: {
+              richText: toRichText(config.label),
+              size: 's',
+              color: config.color,
+              font: 'sans',
+              textAlign: 'start',
+              autoSize: true,
+              w: 80,
+              scale: 1,
+            },
+          },
+          // Due date text
+          ...(task.due_date ? [{
+            id: dueDateId,
+            type: 'text',
+            x: cardX + cardWidth - padding - 90,
+            y: headerY + 6,
+            props: {
+              richText: toRichText(`📅 ${task.due_date}`),
+              size: 's',
+              color: 'grey',
+              font: 'sans',
+              textAlign: 'end',
+              autoSize: true,
+              w: 90,
+              scale: 1,
+            },
+          }] : []),
+          // Task name (main title)
+          {
+            id: taskNameId,
+            type: 'text',
+            x: cardX + padding,
+            y: contentY,
+            props: {
+              richText: toRichText(task.task_name || 'Untitled Task'),
+              size: 'm',
+              color: 'black',
+              font: 'sans',
+              textAlign: 'start',
+              autoSize: false,
+              w: cardWidth - (padding * 2),
+              scale: 1,
+            },
+          },
+          // Description
+          {
+            id: descriptionId,
+            type: 'text',
+            x: cardX + padding,
+            y: descriptionYPos,
+            props: {
+              richText: toRichText(task.description || ''),
+              size: 's',
+              color: 'grey',
+              font: 'sans',
+              textAlign: 'start',
+              autoSize: false,
+              w: cardWidth - (padding * 2),
+              scale: 1,
+            },
+          },
+          // Assignee with avatar indicator
+          ...(task.assignee ? [{
+            id: assigneeId,
+            type: 'text',
+            x: cardX + padding,
+            y: footerY + 8,
+            props: {
+              richText: toRichText(`👤 ${task.assignee}`),
+              size: 's',
+              color: 'violet',
+              font: 'sans',
+              textAlign: 'start',
+              autoSize: true,
+              w: cardWidth - (padding * 2),
+              scale: 1,
+            },
+          }] : []),
+        ];
+
+        // Create all shapes for this card
+        editor.createShapes(cardShapes);
+
+        // Collect all shape IDs for grouping
+        const shapeIds = [
+          cardBackgroundId,
+          headerBackgroundId,
+          priorityBadgeId,
+          taskNameId,
+          descriptionId,
+        ];
+        if (task.assignee) {
+          shapeIds.push(footerBackgroundId, assigneeId);
+        }
+        if (task.due_date) {
+          shapeIds.push(dueDateId);
+        }
+
+        // Group the shapes together
+        editor.select(...shapeIds);
+        editor.groupShapes(shapeIds);
+
+        // Get the group ID (the newly created group)
+        const selectedShapes = editor.getSelectedShapes();
+        if (selectedShapes.length === 1 && selectedShapes[0].type === 'group') {
+          allGroupIds.push(selectedShapes[0].id);
+        }
       });
 
-      // Create all shapes at once
-      editor.createShapes(shapes);
-
-      // Select the new shapes
-      editor.select(...shapes.map(s => s.id));
-
-      // Zoom to fit the new shapes
-      editor.zoomToSelection();
+      // Select all created groups
+      if (allGroupIds.length > 0) {
+        editor.select(...allGroupIds);
+        editor.zoomToSelection();
+      }
 
       setTasksAddedToCanvas(true);
       setSnackbar({
         open: true,
-        message: `${extractedTasks.length} task${extractedTasks.length !== 1 ? 's' : ''} added to canvas!`,
+        message: `${extractedTasks.length} task${extractedTasks.length !== 1 ? 's' : ''} added to canvas! Double-click text to edit.`,
         severity: 'success',
       });
 
